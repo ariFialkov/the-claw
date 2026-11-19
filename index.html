@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>The Claw</title>
+  <meta name="description" content="The Claw — an arcade claw machine game." />
+  <meta name="theme-color" content="#4b2fd6" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <canvas id="fx"></canvas>
+
+  <div id="hud">
+    <div class="top">
+      <div class="pill balance" id="balance"><span class="lbl">CREDITS</span><b id="balance-val">$0.00</b></div>
+      <div class="top-right">
+        <button class="icon-btn" id="btn-sound" data-ui aria-label="Toggle sound">🔊</button>
+        <button class="icon-btn" id="btn-info" data-ui aria-label="Paytable and settings">i</button>
+      </div>
+    </div>
+
+    <div id="timer" class="hidden"><div class="ring"><b id="timer-val">10</b></div></div>
+
+    <div id="prompt">
+      <div class="prompt-text" id="prompt-text">Click anywhere to place bet and play</div>
+    </div>
+
+    <div id="bet" data-ui>
+      <button class="round-btn" id="bet-down" aria-label="Lower bet">−</button>
+      <div class="pill bet-pill"><span class="lbl">BET</span><b id="bet-val">$1.00</b></div>
+      <button class="round-btn" id="bet-up" aria-label="Raise bet">+</button>
+    </div>
+
+    <div id="controls" class="hidden">
+      <div id="stick" data-ui><div id="stick-knob"></div></div>
+      <div class="hint" id="key-hint">WASD / arrows to move · Space to grab</div>
+      <button id="grab" data-ui>GRAB</button>
+    </div>
+
+    <div id="toast"></div>
+
+    <div id="win" class="hidden">
+      <div class="win-rarity" id="win-rarity"></div>
+      <div class="win-name" id="win-name"></div>
+      <div class="win-amount" id="win-amount"></div>
+      <div class="win-mult" id="win-mult"></div>
+    </div>
+  </div>
+
+  <div id="modal" class="hidden" data-ui>
+    <div class="sheet">
+      <button class="icon-btn close" id="modal-close" aria-label="Close">✕</button>
+      <h2>Prizes</h2>
+      <div id="paytable"></div>
+      <p class="fine" id="disclosure"></p>
+      <div id="operator">
+        <h2>Operator</h2>
+        <label class="row">Target RTP <b id="rtp-val"></b>
+          <input type="range" id="rtp" min="50" max="99" step="0.5" />
+        </label>
+      </div>
+      <div class="row"><button class="text-btn" id="reset-credits">Reset demo credits</button></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
