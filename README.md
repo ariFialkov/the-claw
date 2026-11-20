@@ -28,6 +28,7 @@ Claw position never changes the payout. The in-game info panel says so and shows
 | `src/engine.js` | Outcome engine: paytable, RTP → probabilities, `playRound`. Pure, no DOM. Move server-side for real-money use. |
 | `src/main.js` | Scene setup, round flow, input, HUD, win presentation. |
 | `src/machine.js` | Cabinet, lights, gantry and claw. |
+| `src/room.js` | Arcade room backdrop: wall, carpet, muted neighbouring machines. |
 | `src/items.js` | The 28 procedural prize models. |
 | `src/vfx.js` | Sprite particles, glow, confetti, coins. |
 | `src/audio.js` | WebAudio synthesised sound effects. |

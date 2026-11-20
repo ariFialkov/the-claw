@@ -6,6 +6,7 @@ import { createEngine, ITEMS, ITEM_BY_ID, RARITIES, DEFAULT_RTP } from './engine
 import { createItem } from './items.js';
 import { createMachine, BIN, CHUTE, CLAW_HOME, CLAW_RANGE, CLAW_IDLE_Y, PIT_Y } from './machine.js';
 import { createVfx } from './vfx.js';
+import { createRoom } from './room.js';
 import { audio } from './audio.js';
 import { tween, wait, updateTweens, ease, lerp, clamp, rand, pick, money } from './util.js';
 
@@ -45,17 +46,6 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 200);
 scene.add(camera);
 
-{
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 512;
-  const x = c.getContext('2d');
-  const g = x.createLinearGradient(0, 0, 0, 512);
-  g.addColorStop(0, '#3a22c9'); g.addColorStop(0.45, '#7a45f0'); g.addColorStop(0.8, '#ff6fb5'); g.addColorStop(1, '#ffb36b');
-  x.fillStyle = g; x.fillRect(0, 0, 16, 512);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  scene.background = t;
-}
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.55;
@@ -73,7 +63,7 @@ const binLight = new THREE.PointLight('#fff1d0', 3.5, 9, 1.6);
 binLight.position.set(0, 3.6, 0.4);
 scene.add(binLight);
 
-// ground: a soft pool of light that fades into the backdrop + a shadow catcher
+// a soft pool of light on the carpet under the machine
 {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
@@ -81,18 +71,15 @@ scene.add(binLight);
   const g = x.createRadialGradient(128, 128, 0, 128, 128, 128);
   g.addColorStop(0, 'rgba(255,190,240,.75)'); g.addColorStop(0.45, 'rgba(190,140,255,.35)'); g.addColorStop(1, 'rgba(150,110,255,0)');
   x.fillStyle = g; x.fillRect(0, 0, 256, 256);
-  const pool = new THREE.Mesh(new THREE.PlaneGeometry(34, 34), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+  const pool = new THREE.Mesh(new THREE.PlaneGeometry(26, 16), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }));
   pool.rotation.x = -Math.PI / 2;
-  pool.position.y = -2.81;
+  pool.position.set(0, -2.79, 3);
   scene.add(pool);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(34, 34), new THREE.ShadowMaterial({ color: '#2a1a5e', opacity: 0.28 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -2.8;
-  ground.receiveShadow = true;
-  scene.add(ground);
 }
 
+
 try { await document.fonts.load('700 40px "Fredoka Variable"'); } catch { /* fall back to system font */ }
+createRoom(scene);
 const machine = createMachine(scene);
 const claw = machine.claw;
 const vfx = createVfx(scene, $('fx'));
@@ -101,7 +88,7 @@ const vfx = createVfx(scene, $('fx'));
 const bokeh = [];
 for (let i = 0; i < 16; i++) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: vfx.texDot, color: pick(['#ffd23f', '#ff8fd0', '#7df9ff', '#ffffff']), transparent: true, opacity: rand(0.1, 0.28), depthWrite: false }));
-  s.position.set(rand(-16, 16), rand(-1, 13), rand(-16, -7));
+  s.position.set(rand(-18, 18), rand(1, 12), rand(-1.6, 0.5));
   s.scale.setScalar(rand(1.5, 4.5));
   s.userData = { y: s.position.y, ph: rand(0, 6.28), sp: rand(0.2, 0.5) };
   scene.add(s);
