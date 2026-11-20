@@ -24,7 +24,10 @@ const store = {
 };
 const urlRtp = parseFloat(new URLSearchParams(location.search).get('rtp'));
 const engine = createEngine({ rtp: Number.isFinite(urlRtp) ? urlRtp : store.get('rtp', DEFAULT_RTP) });
-let balance = store.get('balance', START_CREDITS);
+let balance = store.get('balance', START_CREDITS); // what the HUD shows
+// The settled balance. A round is paid in full the moment it is drawn, so nothing
+// the player does afterwards (claw position, timing, closing the tab) can change it.
+let settled = balance;
 let betIndex = clamp(store.get('bet', 1), 0, BETS.length - 1);
 audio.setMuted(store.get('muted', false));
 
@@ -296,6 +299,7 @@ function toast(text, ms = 1300) {
 }
 function enterMenu() {
   state = 'menu';
+  balance = settled;
   view.mode = 'menu';
   machine.setLights('idle');
   showEl('prompt', true); showEl('bet', true); showEl('controls', false); showEl('timer', false);
@@ -322,7 +326,7 @@ $('btn-info').onclick = () => { renderPaytable(); showEl('modal', true); audio.c
 $('modal-close').onclick = () => showEl('modal', false);
 $('modal').addEventListener('pointerdown', (e) => { if (e.target === $('modal')) showEl('modal', false); });
 $('rtp').oninput = (e) => { engine.setRtp(e.target.value / 100); store.set('rtp', engine.rtp); renderPaytable(); };
-$('reset-credits').onclick = () => { balance = START_CREDITS; store.set('balance', balance); setHud(); bumpBalance(); };
+$('reset-credits').onclick = () => { if (state !== 'menu') return; balance = settled = START_CREDITS; store.set('balance', settled); setHud(); bumpBalance(); };
 
 // ---- input ---------------------------------------------------------------------
 const input = machine.input;
@@ -378,19 +382,21 @@ async function startRound() {
   if (state !== 'menu') return;
   const stake = BETS[betIndex];
   if (balance < stake) {
-    balance = START_CREDITS; store.set('balance', balance);
+    balance = settled = START_CREDITS; store.set('balance', settled);
     setHud(); bumpBalance(); toast('Credits refilled!');
     return;
   }
   state = 'shuffle';
-  balance -= stake; store.set('balance', balance);
   outcome = engine.playRound(stake); // the round is decided here, before any input
+  settled = balance - stake + outcome.win; // ...and settled here; the rest is presentation
+  store.set('balance', settled);
+  balance -= stake;
   setHud(); bumpBalance();
   audio.bet();
   showEl('prompt', false); showEl('bet', false); showEl('win', false);
   view.mode = 'play';
   machine.setLights('shuffle');
-  await rumblePile(outcome.itemId);
+  try { await rumblePile(outcome.itemId); } catch (err) { console.error(err); }
   timeLeft = ROUND_SECONDS; lastWholeSecond = ROUND_SECONDS;
   updateTimer();
   showEl('controls', true); showEl('timer', true);
@@ -423,6 +429,22 @@ function dropToPit(it, x, z) {
 async function resolveDrop() {
   if (state !== 'play') return;
   state = 'resolve';
+  try {
+    await playOut();
+  } catch (err) {
+    // An animation fault must never cost the player a settled round.
+    console.error(err);
+    vfx.setGlow(null);
+    machine.setBay(null);
+    showEl('win', false);
+    Object.assign(claw, { x: CLAW_HOME.x, z: CLAW_HOME.z, y: CLAW_IDLE_Y, open: 1, jitter: 0 });
+    enterMenu();
+  }
+}
+
+// Presentation of the already-settled round. Where the claw was when it dropped only
+// decides which copy it reaches for; it is the same on winning and losing rounds.
+async function playOut() {
   input.pressed = true;
   $('grab').classList.add('down');
   audio.motor(false);
@@ -430,15 +452,25 @@ async function resolveDrop() {
   const win = outcome.itemId !== null;
   const dist = (it) => Math.hypot(it.x - claw.x, it.z - claw.z);
 
-  // Presentation only: pick which model the claw goes for. The payout is already fixed.
-  let target = null;
-  if (win) target = pile.filter((it) => it.id === outcome.itemId).sort((a, b) => dist(a) - dist(b))[0];
-  else {
-    const near = [...pile].sort((a, b) => dist(a) - dist(b))[0];
-    if (near && dist(near) < 0.85) target = near;
+  // On a win the claw goes for the nearest copy of the awarded prize; on a loss, the
+  // nearest prize of any kind. It always reaches a prize, wherever it was dropped
+  // (including over the trough), so there is no position that produces an empty grab.
+  const byDist = (list) => list.sort((a, b) => dist(a) - dist(b))[0];
+  let target = win ? byDist(pile.filter((it) => it.id === outcome.itemId)) : byDist([...pile]);
+  if (!target) {
+    // should not happen (every layout contains the awarded prize), but never let a
+    // missing model turn a settled win into an empty grab
+    const id = outcome.itemId ?? pick(ITEMS).id;
+    const c = byDist(CELLS.map((cell) => ({ ...cell })));
+    const obj = createItem(id);
+    const y = restY(c.x, c.z);
+    obj.position.set(c.x, y, c.z);
+    machine.group.add(obj);
+    target = { id, x: c.x, z: c.z, y, obj, tiltX: 0, tiltZ: 0, rarity: ITEM_BY_ID[id].rarity };
+    pile.push(target);
   }
-  const tx = target ? target.x : claw.x, tz = target ? target.z : claw.z;
-  const grabY = (target ? target.y + target.obj.userData.height * 0.5 : surfY(claw.x, claw.z)) + 0.66;
+  const tx = target.x, tz = target.z;
+  const grabY = target.y + target.obj.userData.height * 0.5 + 0.66;
 
   audio.drop();
   const sx = claw.x, sz = claw.z;
@@ -450,14 +482,7 @@ async function resolveDrop() {
   input.pressed = false;
   $('grab').classList.remove('down');
   audio.grab();
-  await tween(0.28, (k) => { claw.open = lerp(1, target ? 0.42 : 0, k); }, ease.out);
-
-  if (!target) {
-    await wait(0.15);
-    audio.lift();
-    await tween(0.9, (k) => { claw.y = lerp(grabY, CLAW_IDLE_Y, k); });
-    return finishLoss('Missed!');
-  }
+  await tween(0.28, (k) => { claw.open = lerp(1, 0.42, k); }, ease.out);
 
   // pick the prize up
   const obj = target.obj;
@@ -635,7 +660,7 @@ async function presentWin(it, level) {
       if (tick !== lastTick) { lastTick = tick; audio.coin(tick); }
     }, ease.out);
   }
-  balance += outcome.win; store.set('balance', balance);
+  balance = settled;
   setHud(); bumpBalance();
   await wait(dur * (level >= 2 ? 0.55 : 0.85));
 
