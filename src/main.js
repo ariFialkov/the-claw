@@ -190,7 +190,7 @@ function planPile(outcomeId) {
     const scored = free.map((c, i) => ({ i, d: Math.min(...spread.map((s) => Math.hypot(s.x - c.x, s.z - c.z))) })).sort((a, b) => b.d - a.d);
     spread.push(take(scored[Math.floor(Math.random() * 2)].i, featured));
   }
-  for (const id of ['keys', 'phone', 'headphones', 'pillow', 'hat', 'mask']) {
+  for (const id of ['ring', 'crown', 'goldbar', 'phone', 'console', 'sneakers']) {
     if (id !== featured) take(Math.floor(Math.random() * free.length), id);
   }
   while (free.length) take(0, weighted(ITEMS, (i) => Math.sqrt(i.weight)).id);
@@ -705,7 +705,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }
 
-// debug hook, dev builds only: window.__claw.force('keys')
+// debug hook, dev builds only: window.__claw.force('ring')
 if (import.meta.env.DEV) window.__claw = {
   get state() { return state; },
   engine,

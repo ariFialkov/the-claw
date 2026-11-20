@@ -28,7 +28,7 @@ Claw position never changes the payout. The in-game info panel says so and shows
 | `src/engine.js` | Outcome engine: paytable, RTP → probabilities, `playRound`. Pure, no DOM. Move server-side for real-money use. |
 | `src/main.js` | Scene setup, round flow, input, HUD, win presentation. |
 | `src/machine.js` | Cabinet, lights, gantry and claw. |
-| `src/items.js` | The 12 procedural prize models. |
+| `src/items.js` | The 28 procedural prize models. |
 | `src/vfx.js` | Sprite particles, glow, confetti, coins. |
 | `src/audio.js` | WebAudio synthesised sound effects. |
 | `public/` | PWA manifest, service worker, icons. |
@@ -40,4 +40,4 @@ the hit rate is derived from the target RTP, so changing the RTP changes how oft
 
 - `?rtp=0.92` overrides it for a session.
 - `?operator` shows an RTP slider in the info panel (persisted in localStorage).
-- In dev builds, `window.__claw.force('keys')` forces the next result (or `null` for a loss) to preview a win sequence.
+- In dev builds, `window.__claw.force('ring')` forces the next result (or `null` for a loss) to preview a win sequence.
