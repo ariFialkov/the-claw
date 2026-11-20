@@ -3,8 +3,8 @@ import './style.css';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createEngine, ITEMS, ITEM_BY_ID, RARITIES, DEFAULT_RTP } from './engine.js';
-import { createItem } from './items.js';
-import { createMachine, BIN, CHUTE, CLAW_HOME, CLAW_RANGE, CLAW_IDLE_Y, PIT_Y } from './machine.js';
+import { createItem, LITE_IDS } from './items.js';
+import { createMachine, BIN, CHUTE, CLAW_HOME, CLAW_RANGE, CLAW_IDLE_Y, PIT_FLOOR, BAY, surfY, inChute } from './machine.js';
 import { createVfx } from './vfx.js';
 import { createRoom } from './room.js';
 import { audio } from './audio.js';
@@ -95,24 +95,13 @@ for (let i = 0; i < 16; i++) {
   bokeh.push(s);
 }
 
-// showcase rig (prize presented in front of the camera)
-const show = new THREE.Group();
-show.visible = false;
-camera.add(show);
-const showRays = new THREE.Sprite(new THREE.SpriteMaterial({ map: vfx.texRays, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
-const showGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: vfx.texDot, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
-showRays.position.z = showGlow.position.z = -1.0;
-const showSpin = new THREE.Group();
-const showLight = new THREE.PointLight('#ffffff', 0, 6, 1.2);
-showLight.position.set(0.6, 0.8, 1.2);
-show.add(showRays, showGlow, showSpin, showLight);
-// dimmer that sits between the machine and the showcased prize
-const dimmer = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({ color: '#160a44', transparent: true, opacity: 0, depthWrite: false }));
-dimmer.position.z = -4.2;
-dimmer.visible = false;
-camera.add(dimmer);
-let dimWant = 0;
-const setDim = (v) => { dimWant = v; };
+// prize-bay stage dressing (rays + glow behind the prize in the bay)
+const bayC = machine.bay.center;
+const showRays = new THREE.Sprite(new THREE.SpriteMaterial({ map: vfx.texRays, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 }));
+const showGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: vfx.texDot, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 }));
+showRays.position.set(bayC.x, bayC.y, BAY.z0 + 0.12);
+showGlow.position.set(bayC.x, bayC.y, BAY.z0 + 0.1);
+machine.group.add(showRays, showGlow);
 
 // ---- camera framing ------------------------------------------------------------
 const view = { mode: 'menu', pos: new THREE.Vector3(0, 3, 16), target: new THREE.Vector3(0, 1.5, 0), shake: 0 };
@@ -122,9 +111,18 @@ let portrait = false;
 function frame(mode) {
   const aspect = camera.aspect;
   portrait = aspect < 0.8;
+  if (mode === 'prize') {
+    // front-on shot of the prize bay, held in the upper half so the win card fits below
+    const tv = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const d = Math.max(1.3 / 0.4 / (2 * tv), 1.95 / (2 * tv * aspect));
+    const vh = 2 * d * tv;
+    wantTarget.set(bayC.x, bayC.y - vh * 0.17, BAY.z1);
+    wantPos.set(bayC.x + 0.35, wantTarget.y + 0.45, BAY.z1 + d);
+    return;
+  }
   const box = mode === 'menu'
     ? { w: 6.2, y0: -2.9, y1: 6.1, pitch: 0.2 }
-    : { w: 5.3, y0: -0.5, y1: 4.5, pitch: 0.36 };
+    : { w: 5.3, y0: -1.35, y1: 4.5, pitch: 0.33 };
   const h = box.y1 - box.y0;
   const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
   let d = Math.max(h / (2 * tanV), box.w / (2 * tanV * aspect)) + 2.4;
@@ -146,23 +144,47 @@ window.addEventListener('resize', resize);
 resize();
 
 // ---- pile ----------------------------------------------------------------------
+// Top layer: the prizes the claw can reach. They sit on the banked surface of the heap.
 const CELLS = [];
 {
   const cols = 6, rows = 5;
   const cw = (BIN.x1 - BIN.x0 - 0.3) / cols, ch = (BIN.z1 - BIN.z0 - 0.3) / rows;
   for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
     const x = BIN.x0 + 0.15 + cw * (i + 0.5), z = BIN.z0 + 0.15 + ch * (j + 0.5);
-    if (x < CHUTE.x1 + 0.25 && z > CHUTE.z0 - 0.25) continue;
+    if (inChute(x, z, 0.25)) continue;
     CELLS.push({ x, z });
   }
 }
+const restY = (x, z) => surfY(x, z) - 0.05;
+
+// Deep layers: flat-coloured copies packed against the glass and trough walls so the
+// heap reads as a pit full of prizes. They only ever jiggle.
+const fillers = [];
+{
+  const spots = [];
+  for (let x = -0.4; x <= 1.85; x += 0.56) spots.push([x, 1.27]);
+  for (let z = -1.3; z <= 0.95; z += 0.55) spots.push([1.78, z]);
+  for (let z = -1.3; z <= -0.05; z += 0.6) spots.push([-1.78, z]);
+  for (let z = 0.62; z <= 1.3; z += 0.6) spots.push([-0.5, z]);
+  for (let x = -1.72; x <= -1.0; x += 0.62) spots.push([x, 0.02]);
+  for (let layer = 0; layer < 3; layer++) for (const [x, z] of spots) {
+    const y = PIT_FLOOR + 0.1 + layer * 0.42;
+    if (y > surfY(x, z) - 0.3) continue;
+    const obj = createItem(pick(LITE_IDS), 'pile', true);
+    obj.position.set(x + rand(-0.1, 0.1), y + rand(-0.05, 0.05), z + rand(-0.06, 0.06));
+    obj.rotation.set(rand(-0.6, 0.6), rand(0, 6.28), rand(-0.6, 0.6));
+    machine.group.add(obj);
+    fillers.push({ obj, y: obj.position.y });
+  }
+}
+
 function weighted(list, w) {
   let r = Math.random() * list.reduce((s, i) => s + w(i), 0);
   for (const i of list) { r -= w(i); if (r <= 0) return i; }
   return list[list.length - 1];
 }
 /**
- * Lay out a fresh pile for a resolved round. One "featured" prize is spread
+ * Lay out the top layer for a resolved round. One "featured" prize is spread
  * evenly across the bin so it is always within reach of the claw: on winning
  * rounds that is the prize the engine awarded, on losing rounds it is drawn
  * from the same distribution so both kinds of round look alike.
@@ -171,7 +193,12 @@ function planPile(outcomeId) {
   const featured = outcomeId ?? weighted(ITEMS, (i) => i.weight).id;
   const free = CELLS.map((c) => ({ ...c }));
   const plan = [];
-  const take = (idx, id) => { const [c] = free.splice(idx, 1); plan.push({ id, x: c.x + rand(-0.07, 0.07), z: c.z + rand(-0.06, 0.06) }); return c; };
+  const take = (idx, id) => {
+    const [c] = free.splice(idx, 1);
+    const x = c.x + rand(-0.07, 0.07), z = c.z + rand(-0.06, 0.06);
+    plan.push({ id, x, z, y: restY(x, z) });
+    return c;
+  };
   const spread = [take(Math.floor(Math.random() * free.length), featured)];
   while (spread.length < 4) {
     const scored = free.map((c, i) => ({ i, d: Math.min(...spread.map((s) => Math.hypot(s.x - c.x, s.z - c.z))) })).sort((a, b) => b.d - a.d);
@@ -184,41 +211,66 @@ function planPile(outcomeId) {
   return plan;
 }
 
-async function shufflePile(outcomeId) {
-  const old = pile;
-  pile = [];
-  if (old.length) {
-    audio.whoosh();
-    old.sort((a, b) => a.x - b.x);
-    old.forEach((it, i) => {
-      wait(i * 0.016).then(() => tween(0.3, (k) => {
-        it.obj.scale.setScalar(Math.max(0.001, 1 - k));
-        it.obj.position.y = PIT_Y + k * 0.9;
-        it.obj.rotation.y += 0.25;
-      }, ease.in)).then(() => machine.group.remove(it.obj));
-    });
-    await wait(0.5);
+let rumbleT = 0;
+const RUMBLE = 1.7;
+/**
+ * The machine rumbles and the heap churns into the layout for the next round:
+ * prizes that are staying hop to new spots, the rest sink into the heap while
+ * new ones work their way up from underneath.
+ */
+async function rumblePile(outcomeId) {
+  const plan = planPile(outcomeId);
+  const pool = [...pile];
+  const next = [];
+  rumbleT = RUMBLE;
+  audio.rumble(RUMBLE);
+  for (const p of plan) {
+    let best = -1, bd = 1e9;
+    pool.forEach((o, i) => { const d = Math.hypot(o.x - p.x, o.z - p.z); if (o.id === p.id && d < bd) { bd = d; best = i; } });
+    const delay = rand(0, 0.55), dur = rand(0.55, 0.85);
+    if (best >= 0) {
+      const it = pool.splice(best, 1)[0];
+      const obj = it.obj, from = obj.position.clone(), yaw0 = obj.rotation.y, tx0 = obj.rotation.x, tz0 = obj.rotation.z;
+      const yaw1 = yaw0 + rand(-2.5, 2.5), tx1 = rand(-0.14, 0.14), tz1 = rand(-0.14, 0.14), arc = 0.3 + bd * 0.22;
+      Object.assign(it, { x: p.x, z: p.z, y: p.y, tiltX: tx1, tiltZ: tz1 });
+      next.push(it);
+      wait(delay).then(() => tween(dur, (k, raw) => {
+        const hop = Math.sin(Math.PI * raw);
+        obj.position.set(lerp(from.x, p.x, k), lerp(from.y, p.y, k) + hop * arc, lerp(from.z, p.z, k));
+        obj.rotation.set(lerp(tx0, tx1, k) + hop * 0.5, lerp(yaw0, yaw1, k), lerp(tz0, tz1, k) + hop * 0.35);
+      }, ease.inOut));
+    } else {
+      const obj = createItem(p.id);
+      const yaw = rand(0, 6.28), tx1 = rand(-0.14, 0.14), tz1 = rand(-0.14, 0.14);
+      obj.position.set(p.x, p.y - 1.0, p.z);
+      obj.rotation.set(tx1, yaw, tz1);
+      obj.visible = false;
+      machine.group.add(obj);
+      const it = { ...p, obj, tiltX: tx1, tiltZ: tz1, rarity: ITEM_BY_ID[p.id].rarity };
+      next.push(it);
+      wait(delay + 0.25).then(() => { obj.visible = true; return tween(dur, (k, raw) => {
+        const hop = Math.sin(Math.PI * raw);
+        obj.position.y = lerp(p.y - 1.0, p.y, k) + hop * 0.22;
+        obj.rotation.set(tx1 + hop * 0.5, yaw + (1 - k) * 2.2, tz1);
+      }, ease.out); });
+    }
   }
-  const plan = planPile(outcomeId).sort((a, b) => (a.x + a.z * 0.6) - (b.x + b.z * 0.6));
-  const jobs = plan.map((p, i) => {
-    const obj = createItem(p.id);
-    const yaw = rand(0, Math.PI * 2);
-    obj.position.set(p.x, 3.3, p.z);
-    obj.scale.setScalar(0.001);
-    obj.traverse((m) => { if (m.isMesh) m.receiveShadow = true; });
-    machine.group.add(obj);
-    const it = { ...p, obj, yaw, tiltX: rand(-0.12, 0.12), tiltZ: rand(-0.12, 0.12), rarity: ITEM_BY_ID[p.id].rarity };
-    pile.push(it);
-    return wait(i * 0.05).then(() => {
-      audio.pop(i);
-      return tween(0.75, (k, raw) => {
-        obj.scale.setScalar(Math.min(1, raw * 4));
-        obj.position.y = lerp(3.3, PIT_Y, k);
-        obj.rotation.set(it.tiltX * raw, yaw + (1 - ease.out(raw)) * 7, it.tiltZ * raw);
-      }, ease.bounce);
-    }).then(() => vfx.emit({ x: p.x, y: PIT_Y + 0.1, z: p.z }, { count: 2, color: RARITIES[it.rarity].color, speed: 0.8, size: 0.1, life: 0.4 }));
-  });
-  await Promise.all(jobs);
+  for (const it of pool) {
+    const obj = it.obj, y0 = obj.position.y;
+    wait(rand(0, 0.4)).then(() => tween(0.5, (k) => {
+      obj.position.y = y0 - k * 1.0 + Math.sin(Math.PI * k) * 0.15;
+      obj.rotation.x += 0.06; obj.rotation.y += 0.08;
+    }, ease.in)).then(() => machine.group.remove(obj));
+  }
+  for (const f of fillers) {
+    const r0 = f.obj.rotation.clone(), r1 = [rand(-0.6, 0.6), r0.y + rand(-1.4, 1.4), rand(-0.6, 0.6)];
+    wait(rand(0, 0.7)).then(() => tween(rand(0.4, 0.7), (k, raw) => {
+      f.obj.position.y = f.y + Math.sin(Math.PI * raw) * 0.13;
+      f.obj.rotation.set(lerp(r0.x, r1[0], k), lerp(r0.y, r1[1], k), lerp(r0.z, r1[2], k));
+    }));
+  }
+  pile = next;
+  await wait(RUMBLE);
 }
 
 // ---- HUD -----------------------------------------------------------------------
@@ -338,7 +390,7 @@ async function startRound() {
   showEl('prompt', false); showEl('bet', false); showEl('win', false);
   view.mode = 'play';
   machine.setLights('shuffle');
-  await shufflePile(outcome.itemId);
+  await rumblePile(outcome.itemId);
   timeLeft = ROUND_SECONDS; lastWholeSecond = ROUND_SECONDS;
   updateTimer();
   showEl('controls', true); showEl('timer', true);
@@ -360,9 +412,9 @@ function dropToPit(it, x, z) {
   machine.group.attach(obj);
   const from = obj.position.clone();
   const rx = obj.rotation.x, rz = obj.rotation.z;
-  it.x = x; it.z = z;
+  it.x = x; it.z = z; it.y = restY(x, z);
   return tween(0.55, (k, raw) => {
-    obj.position.set(lerp(from.x, x, raw), lerp(from.y, PIT_Y, k), lerp(from.z, z, raw));
+    obj.position.set(lerp(from.x, x, raw), lerp(from.y, it.y, k), lerp(from.z, z, raw));
     obj.rotation.x = lerp(rx, it.tiltX, raw); obj.rotation.z = lerp(rz, it.tiltZ, raw);
     obj.rotation.y += 0.05 * (1 - raw);
   }, ease.bounce);
@@ -386,7 +438,7 @@ async function resolveDrop() {
     if (near && dist(near) < 0.85) target = near;
   }
   const tx = target ? target.x : claw.x, tz = target ? target.z : claw.z;
-  const grabY = PIT_Y + (target ? target.obj.userData.height * 0.5 : 0) + 0.66;
+  const grabY = (target ? target.y + target.obj.userData.height * 0.5 : surfY(claw.x, claw.z)) + 0.66;
 
   audio.drop();
   const sx = claw.x, sz = claw.z;
@@ -432,16 +484,14 @@ async function resolveDrop() {
     machine.group.attach(obj);
     const y0 = obj.position.y;
     audio.chute();
-    await tween(0.42, (k) => {
-      obj.position.y = lerp(y0, -0.5, k);
-      obj.rotation.x += 0.12;
-      obj.scale.setScalar(lerp(1, 0.7, k));
+    await tween(0.6, (k) => {
+      obj.position.y = lerp(y0, PIT_FLOOR - 0.4, k);
+      obj.rotation.x += 0.1; obj.rotation.z += 0.05;
     }, ease.in);
     vfx.setGlow(null);
-    machine.group.remove(obj);
     pile.splice(pile.indexOf(target), 1);
-    await presentWin(target.id, level);
-    await tween(0.4, (k) => { claw.x = lerp(cx, CLAW_HOME.x, k); claw.z = lerp(cz, CLAW_HOME.z, k); });
+    tween(0.5, (k) => { claw.x = lerp(cx, CLAW_HOME.x, k); claw.z = lerp(cz, CLAW_HOME.z, k); });
+    await presentWin(target, level);
     enterMenu();
     return;
   }
@@ -491,7 +541,7 @@ async function slip(it, x, z) {
   tween(0.2, (k) => { claw.open = lerp(0.42, 0.75, k); }, ease.out);
   await dropToPit(it, x, z);
   audio.thud();
-  vfx.emit({ x, y: PIT_Y + 0.15, z }, { count: 6, color: '#ffffff', speed: 0.9, size: 0.1, life: 0.35 });
+  vfx.emit({ x, y: it.y + 0.15, z }, { count: 6, color: '#ffffff', speed: 0.9, size: 0.1, life: 0.35 });
 }
 
 async function finishLoss(text) {
@@ -507,68 +557,75 @@ async function finishLoss(text) {
 }
 
 // ---- win presentation ------------------------------------------------------------
-async function presentWin(id, level) {
-  const item = ITEM_BY_ID[id];
+// The camera cuts to the prize bay, the prize tumbles out of the trough into it,
+// and the win card shows its value. Everything is colour-coded by tier.
+async function presentWin(it, level) {
+  const item = ITEM_BY_ID[it.id];
   const rarity = RARITIES[item.rarity];
-  const dur = [1.5, 1.9, 2.6, 3.4, 5.6][level];
-  machine.setLights('win', rarity.color);
-  audio.win(level);
+  const dur = [1.6, 2.0, 2.7, 3.5, 5.6][level];
+  const obj = it.obj;
 
-  // 3D prize in front of the camera
-  const model = createItem(id, 'show');
-  showSpin.clear();
-  showSpin.add(model);
-  const dist = 2.2;
-  const visH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  const size = Math.min(visH * 0.3, visH * camera.aspect * 0.42) * (0.85 + level * 0.06);
-  show.position.set(0, visH * 0.16, -dist);
-  show.visible = true;
+  // cut to the bay
+  view.mode = 'prize';
+  frame('prize');
+  view.pos.copy(wantPos); view.pos.z += 1.6; view.pos.y += 0.3;
+  view.target.copy(wantTarget);
+  machine.setLights('win', rarity.color);
+  machine.setBay(rarity.color);
+
+  // the prize drops in from the trough
+  const fit = Math.min(1.25, 0.95 / obj.userData.height, 1.25 / (obj.userData.radius * 2));
+  obj.scale.setScalar(fit);
+  obj.rotation.set(0.5, 0.3, 0.3);
+  obj.position.set(bayC.x, BAY.y1 + 0.5, bayC.z + 0.12);
+  await wait(0.25);
+  await tween(0.55, (k, raw) => {
+    obj.position.y = lerp(BAY.y1 + 0.5, BAY.y0, k);
+    obj.rotation.set(0.5 * (1 - raw), 0.3 + (1 - raw) * 3, 0.3 * (1 - raw));
+  }, ease.bounce);
+  audio.thud();
+  audio.win(level);
+  const burst = new THREE.Vector3(bayC.x, BAY.y0 + 0.4, BAY.z1);
+  vfx.emit(burst, { count: 10 + level * 8, color: [rarity.color, '#ffffff'], speed: 1.6 + level * 0.4, star: level >= 1, size: 0.14 + level * 0.02, life: 0.9 });
   showRays.material.color.set(rarity.color); showGlow.material.color.set(rarity.color);
-  showRays.material.opacity = level >= 1 ? 0.55 : 0.25;
-  showGlow.material.opacity = 0.6;
-  showLight.intensity = 6;
-  const baseScale = size / Math.max(0.45, model.userData.radius * 2, model.userData.height);
+  showRays.material.opacity = 0.35 + level * 0.1; showGlow.material.opacity = 0.55;
+  showGlow.scale.setScalar(1.9);
+
   let spinning = true;
   const t0 = performance.now();
   (function spin() {
     if (!spinning) return;
     const t = (performance.now() - t0) / 1000;
-    model.rotation.y = Math.sin(t * 1.6) * 0.7 + (level >= 4 ? t * 2.4 : 0);
-    model.rotation.z = Math.sin(t * 2.3) * 0.08;
-    model.position.y = Math.sin(t * 2.6) * 0.03;
+    obj.rotation.y = 0.3 + Math.sin(t * 1.5) * 0.6 + (level >= 4 ? t * 2.2 : 0);
+    obj.position.y = BAY.y0 + (level >= 2 ? Math.abs(Math.sin(t * 3.2)) * 0.07 : 0);
     showRays.material.rotation = t * 0.6;
-    const s = baseScale * 2.6 * (1 + Math.sin(t * 5) * 0.04);
-    showRays.scale.setScalar(s * (1 + level * 0.45)); showGlow.scale.setScalar(s * 0.9);
+    showRays.scale.setScalar((1.7 + level * 0.25) * (1 + Math.sin(t * 5) * 0.04));
     requestAnimationFrame(spin);
   })();
 
-  // overlay effects by tier
+  // screen effects by tier
   const confettiCols = [rarity.color, '#ffffff', '#ff5fa2', '#ffd23f', '#31e1ff'];
   if (level >= 1) vfx.confetti(24 + level * 10, confettiCols);
   if (level >= 2) vfx.flash(rarity.color, 0.3);
-  if (level >= 3) { setDim(0.5); vfx.confetti(120, confettiCols); view.shake = 0.25; }
+  if (level >= 3) { vfx.confetti(120, confettiCols); view.shake = 0.12; }
   if (level >= 4) {
-    setDim(0.72); vfx.flash('#ffffff', 0.6); view.shake = 0.5;
+    vfx.flash('#ffffff', 0.6); view.shake = 0.22;
     vfx.coins(70);
     wait(0.8).then(() => vfx.confetti(160, confettiCols, { burst: false }));
-    wait(1.6).then(() => { vfx.confetti(140, confettiCols); vfx.coins(50); view.shake = 0.3; });
+    wait(1.6).then(() => { vfx.confetti(140, confettiCols); vfx.coins(50); view.shake = 0.14; });
     wait(3.0).then(() => { vfx.confetti(120, confettiCols, { burst: false }); vfx.coins(40); });
   }
 
-  // text
+  // win card
   const el = $('win');
   el.style.setProperty('--rc', rarity.color);
-  $('win-rarity').textContent = level >= 4 ? '★ ' + rarity.label + ' ★' : rarity.label;
+  $('win-rarity').textContent = rarity.label;
+  $('win-stars').innerHTML = '★'.repeat(level + 1) + '<i>' + '★'.repeat(4 - level) + '</i>';
   $('win-name').textContent = item.name;
-  $('win-mult').textContent = `×${item.mult}`;
+  $('win-mult').textContent = `×${item.mult} your bet`;
   $('win-amount').textContent = '+' + money(level >= 2 ? 0 : outcome.win);
   el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
   showEl('win', true);
-
-  const entrance = tween(level >= 3 ? 0.7 : 0.4, (k, raw) => {
-    show.scale.setScalar(baseScale * k);
-    if (level >= 3) showSpin.rotation.y = (1 - raw) * Math.PI * 4;
-  }, ease.outBack);
 
   if (level >= 2) {
     let lastTick = -1;
@@ -577,19 +634,20 @@ async function presentWin(id, level) {
       const tick = Math.floor(k * (8 + level * 6));
       if (tick !== lastTick) { lastTick = tick; audio.coin(tick); }
     }, ease.out);
-    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
   }
-  await entrance;
   balance += outcome.win; store.set('balance', balance);
   setHud(); bumpBalance();
-  await wait(dur * (level >= 2 ? 0.5 : 0.8));
+  await wait(dur * (level >= 2 ? 0.55 : 0.85));
 
   showEl('win', false);
-  setDim(0);
-  await tween(0.28, (k) => { show.scale.setScalar(baseScale * (1 - k)); showLight.intensity = 6 * (1 - k); }, ease.in);
+  await tween(0.3, (k) => {
+    obj.scale.setScalar(fit * (1 - k));
+    showRays.material.opacity *= 1 - k; showGlow.material.opacity *= 1 - k;
+  }, ease.in);
   spinning = false;
-  show.visible = false;
-  showSpin.clear();
+  showRays.material.opacity = showGlow.material.opacity = 0;
+  machine.group.remove(obj);
+  machine.setBay(null);
 }
 
 // ---- main loop -------------------------------------------------------------------
@@ -640,6 +698,13 @@ function loop() {
   }
 
   machine.update(dt, t);
+  if (rumbleT > 0) {
+    rumbleT -= dt;
+    const amp = Math.min(1, rumbleT * 3, (RUMBLE - rumbleT) * 6) * 0.03;
+    machine.group.position.set(Math.sin(t * 61) * amp, Math.abs(Math.sin(t * 47)) * amp * 0.7, Math.sin(t * 39) * amp * 0.4);
+    machine.group.rotation.z = Math.sin(t * 53) * amp * 0.1;
+    if (rumbleT <= 0) { machine.group.position.set(0, 0, 0); machine.group.rotation.z = 0; }
+  }
 
   // twinkles on the fancy prizes
   twinkleT -= dt;
@@ -648,7 +713,7 @@ function loop() {
     const it = pick(pile);
     const lvl = RARITY_ORDER.indexOf(it.rarity);
     if (lvl >= 3 && it.obj.parent === machine.group) {
-      vfx.emit({ x: it.x, y: PIT_Y + 0.3, z: it.z }, { count: 1, color: [RARITIES[it.rarity].color, '#ffffff'], speed: 0.25, gravity: -0.3, life: 0.9, size: 0.22, star: true, spread: 0.4 });
+      vfx.emit({ x: it.x, y: it.y + 0.3, z: it.z }, { count: 1, color: [RARITIES[it.rarity].color, '#ffffff'], speed: 0.25, gravity: -0.3, life: 0.9, size: 0.22, star: true, spread: 0.4 });
     }
   }
   for (const b of bokeh) b.position.y = b.userData.y + Math.sin(t * b.userData.sp + b.userData.ph) * 0.8;
@@ -667,8 +732,6 @@ function loop() {
   }
   camera.lookAt(view.target);
 
-  dimmer.material.opacity += (dimWant - dimmer.material.opacity) * Math.min(1, dt * 5);
-  dimmer.visible = dimmer.material.opacity > 0.01;
   vfx.update(dt, t, camera);
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
@@ -683,7 +746,7 @@ async function boot() {
   loop();
   try { await document.fonts.ready; } catch { /* ignore */ }
   machine.setLights('shuffle');
-  await shufflePile(null); // attract-mode pile
+  await rumblePile(null); // attract-mode pile
   enterMenu();
 }
 boot();

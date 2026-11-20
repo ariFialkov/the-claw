@@ -15,9 +15,9 @@ npm run simulate   # Monte-Carlo check of the paytable, e.g. `npm run simulate -
 ## How a round works
 
 1. Player taps anywhere: the stake is taken and `engine.playRound(stake)` draws the result from the paytable with one RNG call.
-2. The prize pile is regenerated for that result and dropped in.
+2. The machine rumbles and the prize heap churns into the layout for that result.
 3. The player steers the claw (joystick / WASD / arrows) and presses GRAB (or Space) before the 10 s timer ends; when it ends the claw drops where it is.
-4. The client animates the already-decided result: on a winning round the claw settles on the nearest copy of the awarded prize; on a losing round the grabbed prize slips.
+4. The client animates the already-decided result: on a winning round the claw settles on the nearest copy of the awarded prize and drops it down the trough, then the camera cuts to the prize bay for the tier-coloured win card; on a losing round the grabbed prize slips.
 
 Claw position never changes the payout. The in-game info panel says so and shows the RTP and odds.
 

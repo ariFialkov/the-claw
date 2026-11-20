@@ -65,6 +65,11 @@ export const audio = {
   },
   click() { tone(900, 0.04, { type: 'square', vol: 0.08 }); },
   pop(i = 0) { tone(320 + i * 22, 0.09, { type: 'sine', vol: 0.16, to: 640 + i * 30 }); },
+  rumble(dur = 1.5) {
+    tone(46, dur, { type: 'sawtooth', vol: 0.16, to: 58, attack: 0.08 });
+    tone(69, dur, { type: 'square', vol: 0.05, to: 52, attack: 0.08 });
+    for (let i = 0; i < 14; i++) noise(0.06, { vol: 0.1 + Math.random() * 0.1, freq: 300 + Math.random() * 900, q: 1.5, at: Math.random() * dur * 0.9 });
+  },
   whoosh() { noise(0.35, { vol: 0.14, freq: 700, q: 0.6 }); },
   tick(urgent) { tone(urgent ? 1320 : 880, 0.05, { type: 'square', vol: urgent ? 0.14 : 0.07 }); },
   go() { tone(N(12), 0.1, { type: 'triangle', vol: 0.25 }); tone(N(24), 0.25, { type: 'triangle', vol: 0.25, at: 0.1 }); },

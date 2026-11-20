@@ -2,6 +2,7 @@
 // game ships with zero binary assets.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const matCache = new Map();
 function mat(color, o = {}) {
@@ -533,23 +534,81 @@ const builders = {
 
 const PILE_SCALE = 1.15;
 
-/**
- * Create a prize model.
- * pose 'pile': lying in the bin, origin at its resting contact point.
- * pose 'show': upright and centred, for the win showcase.
- */
-export function createItem(id, pose = 'pile') {
+const templates = new Map();
+const liteMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 });
+
+// Build a prize once, then bake it down to one geometry per material so every
+// copy in the pile costs a handful of draw calls instead of dozens.
+function template(id, pose) {
+  const key = id + ':' + pose;
+  if (templates.has(key)) return templates.get(key);
   const model = builders[id]();
-  const root = new THREE.Group();
   const mid = new THREE.Group();
   mid.add(model);
   if (pose === 'pile') mid.scale.setScalar(PILE_SCALE);
-  root.add(mid);
   if (pose === 'pile' && !model.userData.upright) mid.rotation.x = -Math.PI / 2;
   const box = new THREE.Box3().setFromObject(mid);
   const c = box.getCenter(new THREE.Vector3());
   mid.position.set(-c.x, pose === 'pile' ? -box.min.y : -c.y, -c.z);
+  mid.updateMatrixWorld(true);
   const size = box.getSize(new THREE.Vector3());
-  root.userData = { id, height: size.y, radius: Math.max(size.x, size.z) / 2 };
+
+  const byMat = new Map();
+  const parts = [];
+  mid.traverse((m) => {
+    if (!m.isMesh) return;
+    let geo = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+    geo.applyMatrix4(m.matrixWorld);
+    if (Array.isArray(m.material)) { parts.push({ geo, mat: m.material }); return; }
+    for (const name of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(name)) geo.deleteAttribute(name);
+    geo.clearGroups();
+    if (!byMat.has(m.material)) byMat.set(m.material, []);
+    byMat.get(m.material).push(geo);
+  });
+  const col = new THREE.Color();
+  const liteGeos = [];
+  for (const [mat, geos] of byMat) {
+    const merged = mergeGeometries(geos, false);
+    parts.push({ geo: merged, mat });
+    if (mat.transparent) continue;
+    const lg = merged.clone();
+    col.copy(mat.color);
+    if (mat.emissive && mat.emissiveIntensity > 0.5 && !mat.emissiveMap) col.lerp(mat.emissive, 0.5);
+    const n = lg.attributes.position.count;
+    const arr = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { arr[i * 3] = col.r; arr[i * 3 + 1] = col.g; arr[i * 3 + 2] = col.b; }
+    lg.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    liteGeos.push(lg);
+  }
+  const t = { parts, lite: liteGeos.length ? mergeGeometries(liteGeos, false) : null, height: size.y, radius: Math.max(size.x, size.z) / 2 };
+  templates.set(key, t);
+  return t;
+}
+
+/** Ids that still read well as a flat-coloured background copy. */
+export const LITE_IDS = Object.keys(builders).filter((id) => !['cube', 'phone', 'console', 'watch', 'capsule'].includes(id));
+
+/**
+ * Create a prize model.
+ * pose 'pile': lying in the bin, origin at its resting contact point.
+ * pose 'show': upright and centred.
+ * lite: single-mesh, flat-coloured copy used for the deep filler layers.
+ */
+export function createItem(id, pose = 'pile', lite = false) {
+  const t = template(id, pose);
+  const root = new THREE.Group();
+  if (lite && t.lite) {
+    const m = new THREE.Mesh(t.lite, liteMat);
+    m.receiveShadow = true;
+    root.add(m);
+  } else {
+    for (const part of t.parts) {
+      const m = new THREE.Mesh(part.geo, part.mat);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      root.add(m);
+    }
+  }
+  root.userData = { id, height: t.height, radius: t.radius };
   return root;
 }

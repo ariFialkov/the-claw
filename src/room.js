@@ -20,7 +20,10 @@ function tex(w, h, draw, repeat) {
 // FADE: 0 = full colour, 1 = fully melted into the wall
 const FADE = 0.62;
 const muted = (color, amount = 0.55) => new THREE.Color(color).lerp(HAZE, 1 - (1 - amount) * (1 - FADE));
-const body = (color, amount) => new THREE.MeshStandardMaterial({ color: muted(color, amount), roughness: 0.7 });
+// glossy dark shells tinted with each machine's colour, like the claw machine's cabinet
+const body = (color, amount) => new THREE.MeshStandardMaterial({ color: muted(new THREE.Color('#1a1352').lerp(new THREE.Color(color), 0.28), amount), roughness: 0.3, metalness: 0.45 });
+const neon = (color) => new THREE.MeshBasicMaterial({ color: muted(color, 0.1).multiplyScalar(1.15) });
+const strip = (w, h, d, color, x, y, z) => box(w, h, d, neon(color), x, y, z, 0.03);
 const glow = (map, strength = 0.5) => new THREE.MeshBasicMaterial({ map, color: new THREE.Color(strength, strength, strength * 1.1).multiplyScalar(0.6) });
 function box(w, h, d, material, x, y, z, r = 0.12) {
   const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2, h / 2, d / 2) * 0.99), material);
@@ -66,6 +69,10 @@ function arcadeCabinet(color, accent, label, seed) {
   const marquee = new THREE.Mesh(new THREE.PlaneGeometry(2.7, 0.7), glow(signTex(label, accent, color), 0.55));
   marquee.position.set(0, 6.6, 2.21);
   g.add(box(2.7, 2.5, 0.1, dark, 0, 4.9, 1.88), screen, marquee);
+  for (const sx of [-1, 1]) {
+    g.add(strip(0.08, 3.2, 0.08, accent, sx * 1.47, 1.65, 2.6), strip(0.08, 2.9, 0.08, accent, sx * 1.47, 4.9, 1.9));
+  }
+  g.add(strip(3.0, 0.07, 0.08, accent, 0, 6.08, 2.2), strip(3.0, 0.07, 0.08, color, 0, 0.12, 2.6));
   for (const sx of [-0.7, 0.2, 0.75]) {
     const b = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), body(sx < 0 ? '#ff3b5c' : '#ffd23f', 0.35));
     b.position.set(sx, 3.68, 2.35);
@@ -75,7 +82,7 @@ function arcadeCabinet(color, accent, label, seed) {
 }
 function gachaTower(color, seed) {
   const g = new THREE.Group();
-  const m = body(color), cap = body('#ffffff', 0.6);
+  const m = body(color), cap = body('#cfd6ff', 0.5);
   const balls = ['#ff5fa2', '#ffd23f', '#5cf4ff', '#7dff9a', '#c084fc'];
   let s = seed;
   const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
@@ -85,7 +92,7 @@ function gachaTower(color, seed) {
     g.add(box(0.5, 0.5, 0.1, body('#1b1240', 0.3), sx, y + 0.6, 1.72));
     const dome = new THREE.Mesh(new THREE.SphereGeometry(0.78, 20, 14), new THREE.MeshStandardMaterial({ color: muted('#cfeaff', 0.4), transparent: true, opacity: 0.35, roughness: 0.15 }));
     dome.position.set(sx, y + 2.25, 0.85);
-    g.add(dome, box(1.7, 0.22, 1.8, cap, sx, y + 1.55, 0.85, 0.08));
+    g.add(dome, box(1.7, 0.22, 1.8, cap, sx, y + 1.55, 0.85, 0.08), strip(1.62, 0.07, 0.06, color, sx, y + 1.38, 1.71));
     for (let i = 0; i < 9; i++) {
       const b = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), body(balls[Math.floor(rnd() * 5)], 0.4));
       b.position.set(sx + (rnd() - 0.5) * 0.9, y + 1.85 + rnd() * 0.45, 0.85 + (rnd() - 0.5) * 0.9);
@@ -107,6 +114,8 @@ function pinball(color, accent, seed) {
   g.add(table);
   for (const sx of [-1.15, 1.15]) for (const z of [1.0, 4.8]) g.add(box(0.2, 2.3, 0.2, leg, sx, 1.15, z, 0.05));
   g.add(box(2.9, 2.6, 0.9, m, 0, 4.9, 0.45));
+  for (const sx of [-1, 1]) g.add(strip(0.08, 2.5, 0.08, accent, sx * 1.42, 4.9, 0.9));
+  g.add(strip(2.9, 0.07, 0.08, accent, 0, 3.66, 0.9));
   const glass = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 2.2), glow(signTex('★ ★ ★', accent, color), 0.5));
   glass.position.set(0, 4.9, 0.91);
   g.add(glass);
