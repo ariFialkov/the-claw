@@ -530,6 +530,174 @@ const builders = {
     }
     return upright(g);
   },
+
+  bracelet() {
+    const g = new THREE.Group();
+    const cols = ['#ff5fa2', '#ffd23f', '#31d6ff', '#5ef0a8', '#a98bff', '#ff9a5c'];
+    cols.forEach((c, i) => {
+      const seg = mesh(new THREE.TorusGeometry(0.18, 0.05, 12, 14, Math.PI / 3 + 0.02), mat(c, { roughness: 0.2 }));
+      seg.rotation.z = (i * Math.PI) / 3;
+      g.add(seg);
+    });
+    return g;
+  },
+
+  soccer() {
+    const g = new THREE.Group();
+    g.add(ball(0.2, mat('#ffffff', { roughness: 0.35 })));
+    const dark = mat('#1f2333', { roughness: 0.4 });
+    const dirs = new THREE.IcosahedronGeometry(1, 0).attributes.position;
+    const seen = new Set();
+    for (let i = 0; i < dirs.count; i++) {
+      const v = new THREE.Vector3().fromBufferAttribute(dirs, i).normalize();
+      const key = v.toArray().map((n) => n.toFixed(2)).join();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const p = mesh(new THREE.SphereGeometry(0.075, 12, 8), dark, v.x * 0.15, v.y * 0.15, v.z * 0.15);
+      p.scale.setScalar(0.9);
+      g.add(p);
+    }
+    return upright(g);
+  },
+
+  dice() {
+    const g = new THREE.Group();
+    const white = mat('#ffffff', { roughness: 0.3 });
+    const die = (col, x, y, z, ry) => {
+      const d = new THREE.Group();
+      d.add(rbox(0.26, 0.26, 0.26, 0.05, mat(col, { roughness: 0.25 })));
+      for (const [px, py] of [[-0.07, 0.07], [0, 0], [0.07, -0.07]]) d.add(ball(0.026, white, px, py, 0.125));
+      for (const [px, pz] of [[-0.06, -0.06], [0.06, 0.06]]) d.add(ball(0.026, white, px, 0.125, pz));
+      for (const [py, pz] of [[0.07, 0.07], [0.07, -0.07], [-0.07, 0.07], [-0.07, -0.07]]) d.add(ball(0.026, white, 0.125, py, pz));
+      d.position.set(x, y, z); d.rotation.y = ry;
+      return d;
+    };
+    g.add(die('#ef4444', -0.12, 0.13, 0, 0.35), die('#3b82f6', 0.15, 0.13, 0.05, -0.5));
+    return upright(g);
+  },
+
+  rocket() {
+    const g = new THREE.Group();
+    const red = mat('#ef4444', { roughness: 0.25 });
+    g.add(cyl(0.12, 0.34, mat('#f8fafc', { roughness: 0.25 }), 0, 0.3, 0));
+    g.add(mesh(new THREE.ConeGeometry(0.12, 0.2, 28), red, 0, 0.57, 0));
+    g.add(cyl(0.122, 0.04, red, 0, 0.2, 0));
+    g.add(mesh(new THREE.CylinderGeometry(0.12, 0.08, 0.06, 24), mat('#475569', { metalness: 0.6, roughness: 0.3 }), 0, 0.1, 0));
+    g.add(mesh(new THREE.ConeGeometry(0.07, 0.14, 16), mat('#ffb020', { emissive: '#ff8a00', emissiveIntensity: 0.9 }), 0, 0.02, 0).rotateX(Math.PI));
+    g.add(ball(0.05, mat('#38bdf8', { roughness: 0.1, emissive: '#38bdf8', emissiveIntensity: 0.4 }), 0, 0.37, 0.095));
+    g.add(mesh(new THREE.TorusGeometry(0.05, 0.012, 8, 20), metal('#e5ebf2'), 0, 0.37, 0.105));
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
+      const fin = rbox(0.03, 0.18, 0.13, 0.012, red, Math.cos(a) * 0.15, 0.16, Math.sin(a) * 0.15);
+      fin.rotation.y = -a + Math.PI / 2;
+      g.add(fin);
+    }
+    return upright(g);
+  },
+
+  frog() {
+    const g = plush({ body: '#5fd068', belly: '#dcffd2', scale: 0.86, nose: '#2f8f3c' });
+    for (const s of [-1, 1]) {
+      g.add(ball(0.065, fur('#5fd068'), s * 0.1, 0.66, 0.06));
+      g.add(ball(0.03, eyeMat(), s * 0.1, 0.67, 0.11));
+    }
+    return g;
+  },
+  pig: () => plush({ body: '#ffb3c7', ear: 'pointy', snout: '#ff8fb0', nose: '#d9567f', tail: '#ff8fb0', scale: 0.9 }),
+  fox: () => plush({ body: '#ff7a2f', belly: '#fff4e6', ear: 'pointy', snout: '#fff4e6', tail: '#ffffff', scale: 0.95 }),
+  unicorn() {
+    const g = plush({ body: '#ffffff', ear: 'pointy', snout: '#ffd6ea', nose: '#ff8fb0', tail: '#c084fc', scale: 1.02 });
+    g.add(mesh(new THREE.ConeGeometry(0.04, 0.2, 14), metal('#ffcf40'), 0, 0.77, 0.07));
+    ['#ff5fa2', '#ffd23f', '#5ef0a8', '#31d6ff', '#c084fc'].forEach((c, i) => g.add(ball(0.06, fur(c), 0, 0.68 - i * 0.075, -0.1 - Math.sin(i * 0.7) * 0.07)));
+    return g;
+  },
+
+  skateboard() {
+    const g = new THREE.Group();
+    g.add(rbox(0.22, 0.03, 0.68, 0.015, mat('#ff2d95', { roughness: 0.35 }), 0, 0.1, 0));
+    g.add(rbox(0.06, 0.032, 0.6, 0.012, mat('#ffd23f', { roughness: 0.35 }), 0, 0.101, 0));
+    for (const sz of [-1, 1]) {
+      const nose = rbox(0.22, 0.03, 0.12, 0.015, mat('#ff2d95', { roughness: 0.35 }), 0, 0.118, sz * 0.37);
+      nose.rotation.x = -sz * 0.4;
+      g.add(nose, rbox(0.2, 0.03, 0.05, 0.01, metal('#e5ebf2'), 0, 0.07, sz * 0.22));
+      for (const sx of [-1, 1]) g.add(cyl(0.045, 0.045, mat('#22e3ff', { roughness: 0.3 }), sx * 0.1, 0.045, sz * 0.22).rotateZ(Math.PI / 2));
+    }
+    return upright(g);
+  },
+
+  handbag() {
+    const g = new THREE.Group();
+    const leather = mat('#ff4d8d', { roughness: 0.4 });
+    const gold = metal('#ffcf40');
+    g.add(rbox(0.46, 0.32, 0.17, 0.06, leather, 0, 0.16, 0));
+    g.add(rbox(0.47, 0.15, 0.18, 0.06, mat('#e0356f', { roughness: 0.4 }), 0, 0.26, 0));
+    g.add(rbox(0.09, 0.07, 0.03, 0.015, gold, 0, 0.2, 0.09));
+    const handle = mesh(new THREE.TorusGeometry(0.13, 0.016, 10, 28, Math.PI), gold, 0, 0.32, 0);
+    g.add(handle);
+    for (const s of [-1, 1]) g.add(ball(0.022, gold, s * 0.13, 0.32, 0));
+    return upright(g);
+  },
+
+  camera() {
+    const g = new THREE.Group();
+    const shell = mat('#a7f3d0', { roughness: 0.35 });
+    g.add(rbox(0.48, 0.32, 0.2, 0.05, shell, 0, 0.16, 0));
+    g.add(rbox(0.48, 0.1, 0.205, 0.04, mat('#f8fafc', { roughness: 0.35 }), 0, 0.05, 0));
+    ['#ff5fa2', '#ffd23f', '#31d6ff'].forEach((c, i) => g.add(rbox(0.03, 0.2, 0.01, 0.004, mat(c), -0.19 + i * 0.035, 0.2, 0.101)));
+    g.add(cyl(0.11, 0.08, mat('#f8fafc', { roughness: 0.3 }), 0.03, 0.18, 0.12).rotateX(Math.PI / 2));
+    g.add(cyl(0.085, 0.1, mat('#1f2937', { roughness: 0.3 }), 0.03, 0.18, 0.125).rotateX(Math.PI / 2));
+    g.add(cyl(0.05, 0.11, mat('#3b4a7a', { roughness: 0.05, metalness: 0.6 }), 0.03, 0.18, 0.127).rotateX(Math.PI / 2));
+    g.add(rbox(0.09, 0.06, 0.02, 0.012, mat('#fff7c2', { emissive: '#fff2a0', emissiveIntensity: 0.5 }), 0.17, 0.27, 0.1));
+    g.add(cyl(0.035, 0.03, mat('#ef4444', { roughness: 0.25 }), -0.15, 0.33, 0));
+    return upright(g);
+  },
+
+  vr() {
+    const g = new THREE.Group();
+    g.add(rbox(0.48, 0.25, 0.2, 0.08, mat('#f8fafc', { roughness: 0.3 }), 0, 0.14, 0.05));
+    g.add(rbox(0.42, 0.18, 0.04, 0.07, mat('#12142a', { roughness: 0.08, metalness: 0.7 }), 0, 0.14, 0.14));
+    g.add(rbox(0.3, 0.02, 0.045, 0.008, mat('#22e3ff', { emissive: '#22e3ff', emissiveIntensity: 1.1 }), 0, 0.14, 0.142));
+    const strap = mesh(new THREE.TorusGeometry(0.22, 0.03, 10, 30, Math.PI), mat('#2a2f4a', { roughness: 0.7 }), 0, 0.14, -0.04);
+    strap.rotation.set(Math.PI / 2, 0, Math.PI);
+    g.add(strap);
+    g.add(rbox(0.07, 0.03, 0.34, 0.012, mat('#2a2f4a', { roughness: 0.7 }), 0, 0.27, -0.1));
+    return upright(g);
+  },
+
+  chain() {
+    const g = new THREE.Group();
+    const gold = mat('#ffc531', { metalness: 1, roughness: 0.2, emissive: '#6b4300', emissiveIntensity: 0.35 });
+    const n = 18;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const link = mesh(new THREE.TorusGeometry(0.045, 0.014, 8, 16), gold, Math.cos(a) * 0.22, Math.sin(a) * 0.26 + 0.05, 0);
+      link.rotation.set(i % 2 ? Math.PI / 2 : 0, 0, a + Math.PI / 2);
+      link.scale.set(1.25, 1, 1);
+      g.add(link);
+    }
+    g.add(cyl(0.085, 0.025, gold, 0, -0.29, 0.01).rotateX(Math.PI / 2));
+    g.add(mesh(new THREE.TorusGeometry(0.085, 0.014, 8, 28), gold, 0, -0.29, 0.01));
+    g.add(ball(0.035, mat('#ff2d55', { roughness: 0.05, emissive: '#ff2d55', emissiveIntensity: 0.6 }), 0, -0.29, 0.03));
+    return g;
+  },
+
+  trophy() {
+    const g = new THREE.Group();
+    const gold = new THREE.MeshStandardMaterial({ color: '#ffc531', metalness: 1, roughness: 0.2, emissive: '#6b4300', emissiveIntensity: 0.35, side: THREE.DoubleSide });
+    const pts = [[0.05, 0.2], [0.035, 0.28], [0.06, 0.34], [0.15, 0.45], [0.19, 0.58], [0.2, 0.68]].map(([x, y]) => new THREE.Vector2(x, y));
+    g.add(mesh(new THREE.LatheGeometry(pts, 32), gold));
+    g.add(mesh(new THREE.TorusGeometry(0.2, 0.014, 8, 32), gold, 0, 0.68, 0).rotateX(Math.PI / 2));
+    g.add(mesh(new THREE.CylinderGeometry(0.06, 0.11, 0.07, 24), gold, 0, 0.17, 0));
+    g.add(rbox(0.3, 0.13, 0.3, 0.03, mat('#20163f', { roughness: 0.3, metalness: 0.3 }), 0, 0.065, 0));
+    g.add(rbox(0.16, 0.06, 0.01, 0.004, gold, 0, 0.065, 0.151));
+    for (const s of [-1, 1]) {
+      const h = mesh(new THREE.TorusGeometry(0.075, 0.016, 8, 20, Math.PI), gold, s * 0.19, 0.55, 0);
+      h.rotation.z = -s * Math.PI / 2;
+      g.add(h);
+    }
+    g.add(ball(0.03, mat('#ff2d55', { roughness: 0.05, emissive: '#ff2d55', emissiveIntensity: 0.6 }), 0, 0.5, 0.165));
+    return upright(g);
+  },
 };
 
 const PILE_SCALE = 1.15;

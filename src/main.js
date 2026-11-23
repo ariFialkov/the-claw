@@ -12,7 +12,7 @@ import { tween, wait, updateTweens, ease, lerp, clamp, rand, pick, money } from 
 
 const $ = (id) => document.getElementById(id);
 const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
-const BETS = [50, 100, 200, 500, 1000];
+const BETS = [100, 200, 500, 1000, 2000]; // whole dollars only: keeps every payout an exact number of cents
 const ROUND_SECONDS = 10;
 const START_CREDITS = 10000;
 const CLAW_SPEED = 1.9;
@@ -28,7 +28,7 @@ let balance = store.get('balance', START_CREDITS); // what the HUD shows
 // The settled balance. A round is paid in full the moment it is drawn, so nothing
 // the player does afterwards (claw position, timing, closing the tab) can change it.
 let settled = balance;
-let betIndex = clamp(store.get('bet', 1), 0, BETS.length - 1);
+let betIndex = clamp(store.get('betIdx', 0), 0, BETS.length - 1);
 audio.setMuted(store.get('muted', false));
 
 let state = 'boot'; // boot | menu | shuffle | play | resolve
@@ -207,7 +207,7 @@ function planPile(outcomeId) {
     const scored = free.map((c, i) => ({ i, d: Math.min(...spread.map((s) => Math.hypot(s.x - c.x, s.z - c.z))) })).sort((a, b) => b.d - a.d);
     spread.push(take(scored[Math.floor(Math.random() * 2)].i, featured));
   }
-  for (const id of ['ring', 'crown', 'goldbar', 'phone', 'console', 'sneakers']) {
+  for (const id of ['ring', 'crown', 'trophy', 'goldbar', 'chain', 'phone']) {
     if (id !== featured) take(Math.floor(Math.random() * free.length), id);
   }
   while (free.length) take(0, weighted(ITEMS, (i) => Math.sqrt(i.weight)).id);
@@ -306,8 +306,8 @@ function enterMenu() {
   setHud();
 }
 
-$('bet-down').onclick = () => { betIndex = Math.max(0, betIndex - 1); store.set('bet', betIndex); audio.click(); setHud(); };
-$('bet-up').onclick = () => { betIndex = Math.min(BETS.length - 1, betIndex + 1); store.set('bet', betIndex); audio.click(); setHud(); };
+$('bet-down').onclick = () => { betIndex = Math.max(0, betIndex - 1); store.set('betIdx', betIndex); audio.click(); setHud(); };
+$('bet-up').onclick = () => { betIndex = Math.min(BETS.length - 1, betIndex + 1); store.set('betIdx', betIndex); audio.click(); setHud(); };
 $('btn-sound').onclick = () => { audio.setMuted(!audio.muted); store.set('muted', audio.muted); audio.click(); setHud(); };
 
 const operator = new URLSearchParams(location.search).has('operator');
@@ -315,8 +315,8 @@ $('operator').style.display = operator ? '' : 'none';
 function renderPaytable() {
   const t = engine.table;
   $('paytable').innerHTML = [...t.rows].reverse().map((r) =>
-    `<span class="dot" style="background:${RARITIES[r.rarity].color}"></span><span>${r.name}</span><span class="m">×${r.mult}</span><span class="o">1 in ${Math.round(1 / r.p).toLocaleString()}</span>`).join('');
-  $('disclosure').textContent = `Each round's result is drawn by a random number generator the moment the bet is placed; ` +
+    `<span class="dot" style="background:${RARITIES[r.rarity].color}"></span><span>${r.name}</span><span class="m">${money(Math.round(BETS[betIndex] * r.mult))}</span><span class="o">1 in ${Math.round(1 / r.p).toLocaleString()}</span>`).join('');
+  $('disclosure').textContent = `Prize values shown for a ${money(BETS[betIndex])} bet. Each round's result is drawn by a random number generator the moment the bet is placed; ` +
     `claw position and timing do not change it. Theoretical return to player: ${(t.rtp * 100).toFixed(1)}%. ` +
     `Chance of a prize per round: ${(t.hitRate * 100).toFixed(1)}%. Demo credits only — no real-money value.`;
   $('rtp').value = (t.rtp * 100).toFixed(1);
@@ -647,7 +647,7 @@ async function presentWin(it, level) {
   $('win-rarity').textContent = rarity.label;
   $('win-stars').innerHTML = '★'.repeat(level + 1) + '<i>' + '★'.repeat(4 - level) + '</i>';
   $('win-name').textContent = item.name;
-  $('win-mult').textContent = `×${item.mult} your bet`;
+  $('win-mult').textContent = `×${item.mult.toFixed(2)} your bet`;
   $('win-amount').textContent = '+' + money(level >= 2 ? 0 : outcome.win);
   el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
   showEl('win', true);
